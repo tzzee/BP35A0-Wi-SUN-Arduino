@@ -50,8 +50,7 @@ bool BP35A1::assureAsciiMode()
   }
   else
   {
-    setAsciiMode(true);
-    return waitSuccessResponse();
+    return setAsciiMode(true);
   }
 }
 
@@ -216,8 +215,8 @@ bool BP35A1::scanChannel()
   // duration: 6~9 でスキャン
   for (int duration = 6; duration < 10; duration++)
   {
-    debugLog("SKSCAN 2 FFFFFFFF %d\r\n", duration);
-    _serial->printf("SKSCAN 2 FFFFFFFF %d\r\n", duration);
+    debugLog("SKSCAN 2 FFFFFFFF %d 0\r\n", duration);
+    _serial->printf("SKSCAN 2 FFFFFFFF %d 0\r\n", duration);
 
     if (!waitSuccessResponse())
     {
@@ -381,12 +380,12 @@ bool BP35A1::setAsciiMode(bool use_ascii_mode)
   if (use_ascii_mode)
   {
     debugLog("BP35A1::send [WOPT] 01\r\n");
-    _serial->print("WOPT 01\n\n");
+    _serial->print("WOPT 01\r\n");
   }
   else
   {
     debugLog("BP35A1::send [WOPT] 00\r\n");
-    _serial->print("WOPT 00\n\n");
+    _serial->print("WOPT 00\r\n");
   }
   bool status = waitSuccessResponse();
   clearBuffer();
@@ -418,7 +417,7 @@ bool BP35A1::waitRoptResponse()
 bool BP35A1::sendUdp(std::vector<byte> data)
 {
   std::stringstream command;
-  command << "SKSENDTO 1 " << _ipv6.c_str() << " 0E1A 1 " << std::setw(4) << std::setfill('0') << std::uppercase << std::hex << data.size() << " ";
+  command << "SKSENDTO 1 " << _ipv6.c_str() << " 0E1A 1 0 " << std::setw(4) << std::setfill('0') << std::uppercase << std::hex << data.size() << " ";
 
   _serial->print(command.str().c_str());
   for (const auto &d : data)
@@ -441,7 +440,10 @@ bool BP35A1::waitUpdResponse(const int timeout)
 
       if (res.indexOf("ERXUDP") != -1)
       {
-        return handleUdpResponse(res);
+        if (handleUdpResponse(res))
+        {
+          return true;
+        }
       }
       delay(READ_INTERVAL);
     }
@@ -460,12 +462,12 @@ bool BP35A1::handleUdpResponse(String response)
     cols.push_back(col);
   }
 
-  // レスポンスの要素数が 9 以外の場合は return
-  if (cols.size() != 9)
+  // レスポンスの要素数が 10 以外の場合は return
+  if (cols.size() != 10)
   {
     return false;
   }
-  std::string data = cols[8];
+  std::string data = cols[9];
   // レスポンスした識別子がスマートメータと一致するか
   if (data.size() < 24 || data.substr(8, 6) != SMART_METER_ID)
   {
@@ -582,9 +584,12 @@ String BP35A1::readSerialLine()
     {
       char c = _serial->read();
       line += c;
-      if (line.endsWith("\r\n"))
+      if (line.endsWith("\r"))
       {
-        return line.substring(0, line.length() - 2);
+        if (_serial->peek() == '\n') {
+          _serial->read(); // '\n' を読み捨て
+        }
+        return line.substring(0, line.length() - 1);
       }
     }
   }
