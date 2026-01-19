@@ -240,9 +240,9 @@ bool BP35A1::scanChannel()
 bool BP35A1::waitSuccessResponse(const int timeout)
 {
   _serial->flush();
-  long maxTime = millis() + timeout;
+  const unsigned long startTime = millis();
 
-  while (maxTime > millis())
+  while (startTime + timeout > millis())
   {
     if (_serial->available())
     {
@@ -266,11 +266,11 @@ bool BP35A1::waitSuccessResponse(const int timeout)
 
 bool BP35A1::waitUdpSuccessResponse(int timeout)
 {
-  long maxTime = millis() + timeout;
+  const unsigned long startTime = millis();
   bool isReceived = false;
   int retryCount = 0;
 
-  while (maxTime > millis())
+  while (startTime + timeout > millis())
   {
     if (_serial->available())
     {
@@ -356,11 +356,11 @@ bool BP35A1::waitUdpSuccessResponse(int timeout)
 
 bool BP35A1::waitScanResponse(int duration)
 {
-  long maxTime = millis() + duration * READ_TIMEOUT;
+  const unsigned long startTime = millis();
   bool isReceived = false;
   String channel, panId, addr;
 
-  while (maxTime > millis())
+  while (startTime + duration * READ_TIMEOUT > millis())
   {
     if (_serial->available())
     {
@@ -436,9 +436,9 @@ bool BP35A1::requestConnection()
 
 bool BP35A1::waitConnection()
 {
-  long maxTime = millis() + CONNECTION_TIMEOUT;
+  unsigned long startTime = millis();
 
-  while (maxTime > millis())
+  while (startTime + CONNECTION_TIMEOUT > millis())
   {
     if (_serial->available())
     {
@@ -456,7 +456,7 @@ bool BP35A1::waitConnection()
       else if (res.indexOf("EVENT 21") != -1)
       {
         debugLog("BP35A1::now connecting...\r\n");
-        maxTime = millis() + CONNECTION_TIMEOUT;
+        startTime = millis();
       }
     }
 
@@ -524,8 +524,8 @@ bool BP35A1::sendUdp(std::vector<byte> data)
 
 bool BP35A1::waitUdpResponse(const int timeout)
 {
-  long maxTime = millis() + timeout;
-  while (maxTime > millis())
+  const unsigned long startTime = millis();
+  while (startTime + timeout > millis())
   {
     if (_serial->available())
     {
