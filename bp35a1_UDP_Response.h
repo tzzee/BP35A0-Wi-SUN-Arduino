@@ -10,6 +10,7 @@ class BP35A1UdpResponse
 {
 public:
   BP35A1UdpResponse() {}
+  static const int NO_DATA;
 };
 
 class Coefficient : public BP35A1UdpResponse
@@ -37,7 +38,7 @@ public:
   int getTotalPower() { return _totalPower; }
 
 private:
-  int _totalPower;
+  int _totalPower = NO_DATA;
 };
 
 class PowerUnit : public BP35A1UdpResponse
@@ -128,7 +129,7 @@ public:
   long getTotalPower() { return _totalPower; }
 
 private:
-  long _totalPower; // 積算電力量
+  long _totalPower = NO_DATA; // 積算電力量
 };
 
 #endif

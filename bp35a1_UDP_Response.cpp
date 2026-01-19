@@ -1,5 +1,7 @@
 #include "bp35a1_UDP_Response.h"
 
+const int BP35A1UdpResponse::NO_DATA = 0xFFFFFFFE;
+
 Coefficient::Coefficient(std::string data)
 {
   _coefficient = strtol(data.c_str(), NULL, 16);
