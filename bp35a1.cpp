@@ -170,7 +170,7 @@ bool BP35A1::getProperties(std::vector<CmdType> commands)
     data.push_back(static_cast<byte>(cmd));
     data.push_back(0x00);
   }
-  return sendUdp(data) && waitUpdResponse();
+  return sendUdp(data) && waitUdpResponse();
 }
 
 bool BP35A1::setProperties(CmdType command, std::vector<byte> values)
@@ -191,7 +191,7 @@ bool BP35A1::setProperties(CmdType command, std::vector<byte> values)
   {
     data.push_back(value);
   }
-  return sendUdp(data) && waitUpdResponse();
+  return sendUdp(data) && waitUdpResponse();
 }
 
 void BP35A1::clearBuffer()
@@ -429,7 +429,7 @@ bool BP35A1::sendUdp(std::vector<byte> data)
   return waitSuccessResponse();
 }
 
-bool BP35A1::waitUpdResponse(const int timeout)
+bool BP35A1::waitUdpResponse(const int timeout)
 {
   long maxTime = millis() + timeout;
   while (maxTime > millis())
@@ -437,6 +437,7 @@ bool BP35A1::waitUpdResponse(const int timeout)
     if (_serial->available())
     {
       String res = readSerialLine();
+      log_d("Received: %s", res.c_str());
 
       if (res.indexOf("ERXUDP") != -1)
       {
@@ -448,6 +449,7 @@ bool BP35A1::waitUpdResponse(const int timeout)
       delay(READ_INTERVAL);
     }
   }
+  log_w("BP35A1::waitUdpResponse(): TimeOut");
   return false;
 }
 

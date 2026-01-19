@@ -64,7 +64,7 @@ public:
   bool requestCoefficient();                    // 積算電力量係数を取得する(0xD3)
   bool requestTotalPower();                     // 積算電力量計測値を取得する(0xE0)
   bool requestPowerUnit();                      // 積算電力量単位を取得する(0xE1)
-  bool requestCurrentTotalPowerHistories();     // 算電力量計測値履歴を取得する(0xE2)
+  bool requestCurrentTotalPowerHistories();     // 積算電力量計測値履歴を取得する(0xE2)
   bool requestTotalHistoryCollectionDate();     // 積算履歴収集日を取得する(0xE5)
   bool setTotalHistoryCollectionDate(byte day); // 積算履歴収集日を設定する(0xE5)
   bool requestInstantaneousPower();             // 瞬時電力計測値を取得する(0xE7)
@@ -94,7 +94,7 @@ private:
   bool waitRoptResponse();  // ROPTコマンドの応答を待つ
 
   bool sendUdp(std::vector<byte> data);
-  bool waitUpdResponse(const int timeout = READ_TIMEOUT);
+  bool waitUdpResponse(const int timeout = READ_TIMEOUT);
   bool handleUdpResponse(String response);
   bool handleUdpGetResponse(std::string *data);
   bool handleUdpSetResponse(std::string *data);
