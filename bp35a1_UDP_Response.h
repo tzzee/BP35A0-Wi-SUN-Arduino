@@ -24,7 +24,7 @@ public:
   int getCoefficient() { return _coefficient; }
 
 private:
-  int _coefficient;
+  int _coefficient = 0;
 };
 
 class TotalPower : public BP35A1UdpResponse
@@ -54,7 +54,7 @@ public:
 private:
   static float convertPowerUnit(std::string stringUnit);
 
-  float _powerUnit;
+  float _powerUnit = 0.f;
 };
 
 class TotalPowerHistories : public BP35A1UdpResponse

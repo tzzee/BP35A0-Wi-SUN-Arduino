@@ -237,10 +237,12 @@ bool BP35A1::scanChannel()
   return false;
 }
 
-bool BP35A1::waitSuccessResponse()
+bool BP35A1::waitSuccessResponse(const int timeout)
 {
   _serial->flush();
-  while (true)
+  long maxTime = millis() + timeout;
+
+  while (maxTime > millis())
   {
     if (_serial->available())
     {
@@ -259,7 +261,98 @@ bool BP35A1::waitSuccessResponse()
 
     delay(READ_INTERVAL);
   }
+  return false;
 }
+
+bool BP35A1::waitUdpSuccessResponse(int timeout)
+{
+  long maxTime = millis() + timeout;
+  bool isReceived = false;
+  int retryCount = 0;
+
+  while (maxTime > millis())
+  {
+    if (_serial->available())
+    {
+      String res = readSerialLine();
+
+      if (res.indexOf("EVENT 02") != -1)
+      {
+        if (isReceived) {
+          return true;
+        }
+        else
+        {
+          isReceived = true;
+        }
+      }
+      else if (res.indexOf("EVENT 21") != -1)
+      {
+        // レスポンスを ' ' で分割
+        std::vector<std::string> cols;
+        std::istringstream stream(res.c_str());
+        std::string col;
+        while (std::getline(stream, col, ' '))
+        {
+          cols.push_back(col);
+        }
+
+        // レスポンスの要素数が 5 以外の場合は return
+        if (cols.size() != 5)
+        {
+          Serial.println("BP35A1::waitUdpEvent(): Invalid response format");
+          return false;
+        }
+
+        if (cols[4].find("00") != std::string::npos)
+        {
+          Serial.println("BP35A1::waitUdpEvent(): Response data received");
+          if (isReceived) {
+            return true;
+          }
+          else
+          {
+            isReceived = true;
+          }
+        }
+        else if (cols[4].find("01") != std::string::npos)
+        {
+          Serial.println("BP35A1::waitUdpEvent(): No response data");
+          return false;
+        }
+        else if (cols[4].find("02") != std::string::npos)
+        {
+          retryCount++;
+          if (retryCount >= 3)
+          {
+            Serial.println("BP35A1::waitUdpEvent(): Response data is being prepared, but no data after retries");
+            return false;
+          }
+        }
+      }
+      else if (res.indexOf("FAIL ER") != -1)
+      {
+        Serial.println("BP35A1::waitUdpEvent(): error response received");
+        return false;
+      }
+      else if (res.indexOf("OK") != -1)
+      {
+        if (isReceived)
+        {
+          return true;
+        }
+        else
+        {
+          isReceived = true;
+        }
+      }
+    }
+    delay(READ_INTERVAL);
+  }
+  Serial.println("BP35A1::waitScanResponse(): TimeOut");
+  return false;
+}
+
 
 bool BP35A1::waitScanResponse(int duration)
 {
@@ -426,7 +519,7 @@ bool BP35A1::sendUdp(std::vector<byte> data)
   }
   _serial->print("\r\n");
 
-  return waitSuccessResponse();
+  return waitUdpSuccessResponse();
 }
 
 bool BP35A1::waitUdpResponse(const int timeout)
@@ -437,7 +530,6 @@ bool BP35A1::waitUdpResponse(const int timeout)
     if (_serial->available())
     {
       String res = readSerialLine();
-      log_d("Received: %s", res.c_str());
 
       if (res.indexOf("ERXUDP") != -1)
       {
@@ -449,7 +541,6 @@ bool BP35A1::waitUdpResponse(const int timeout)
       delay(READ_INTERVAL);
     }
   }
-  log_w("BP35A1::waitUdpResponse(): TimeOut");
   return false;
 }
 
@@ -591,7 +682,8 @@ String BP35A1::readSerialLine()
         if (_serial->peek() == '\n') {
           _serial->read(); // '\n' を読み捨て
         }
-        return line.substring(0, line.length() - 1);
+        line.trim();
+        return line;
       }
     }
   }

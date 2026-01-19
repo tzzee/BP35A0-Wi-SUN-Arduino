@@ -84,7 +84,8 @@ public:
   float getCurrentTotalPower() { return convertTotalPower(_currentTotalPower.getTotalPower()); }
 
 private:
-  bool waitSuccessResponse();
+  bool waitSuccessResponse(const int timeout = READ_TIMEOUT);
+  bool waitUdpSuccessResponse(const int timeout = READ_TIMEOUT);
   bool waitScanResponse(int duration);
   bool waitIpv6AddrResponse();
   bool requestConnection(); // PANN 接続要求を送信する
