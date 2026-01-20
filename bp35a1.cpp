@@ -101,6 +101,13 @@ bool BP35A1::setPanId()
   return waitSuccessResponse();
 }
 
+bool BP35A1::setSessionLifetime(unsigned int seconds)
+{
+  debugLog("BP35A1::send [SKSREG S16 <%08X>]\r\n", seconds);
+  _serial->printf("SKSREG S16 %08X\r\n", seconds);
+  return waitSuccessResponse();
+}
+
 bool BP35A1::requestAndWaitConnection()
 {
   if (!requestConnection() || !waitConnection())
@@ -264,6 +271,20 @@ bool BP35A1::waitSuccessResponse(const int timeout)
   return false;
 }
 
+bool BP35A1::readReCertificationEvent()
+{
+  if (_serial->available())
+  {
+    String res = readSerialLine();
+    if (res.indexOf("EVENT 29") != -1)
+    {
+      log_d("BP35A1::readReCertificationEvent(): re certification event received");
+      return waitConnection();
+    }
+  }
+  return true;
+}
+
 bool BP35A1::waitUdpSuccessResponse(int timeout, bool *needRetry)
 {
   const unsigned long startTime = millis();
@@ -350,6 +371,16 @@ bool BP35A1::waitUdpSuccessResponse(int timeout, bool *needRetry)
           }
           return false;
         }
+      }
+      else if (res.indexOf("EVENT 29") != -1)
+      {
+        log_d("BP35A1::waitUdpEvent(): re certification event received");
+        if (waitConnection()) {
+          if (needRetry != nullptr) {
+            *needRetry = true;
+          }
+        }
+        return false;
       }
       else if (res.indexOf("FAIL ER") != -1)
       {
@@ -472,6 +503,7 @@ bool BP35A1::waitConnection()
 
       if (res.indexOf("EVENT 25") != -1)
       {
+        log_d("BP35A1::connection succeeded");
         return true;
       }
       else if (res.indexOf("EVENT 24") != -1)

@@ -55,7 +55,9 @@ public:
   bool getIpv6Address();           // MAC アドレスを IPv6 アドレスに変換
   bool setChannel();               // チャンネルを設定する
   bool setPanId();                 // PAN ID を設定する
+  bool setSessionLifetime(unsigned int seconds); // PANAセッション有効期限を設定する
   bool requestAndWaitConnection(); // PANA 接続要求を送信し、接続完了を待つ
+  bool readReCertificationEvent(); // 再認証イベントを読み取る
 
   bool getProperties(std::vector<CmdType> commands);
   bool setProperties(CmdType command, std::vector<byte> values);
