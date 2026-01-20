@@ -91,6 +91,7 @@ private:
   bool waitScanResponse(int duration);
   bool waitIpv6AddrResponse(const int timeout = READ_TIMEOUT);
   bool requestConnection(); // PANN 接続要求を送信する
+  bool requestReconnection(); // PANA 接続要求を送信する
   bool waitConnection();    // PANA 接続完了を待つ
 
   bool setAsciiMode(bool use_ascii_mode);
@@ -150,6 +151,9 @@ private:
   InstantaneousPower _instantaneousPower;       // 瞬時電力計測値
   InstantaneousAmperage _instantaneousAmperage; // 瞬時電流計測値
   CurrentTotalPower _currentTotalPower;         // 最新30分毎の積算電力量計測値(kWh)
+
+  unsigned int _lastCertificationTime;
+  unsigned int _panaSessionLifetime = 86400; // PANAセッション有効期限(秒)
 
   static const int READ_TIMEOUT = 5000;
   static const int READ_INTERVAL = 100;

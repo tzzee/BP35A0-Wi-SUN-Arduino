@@ -23,6 +23,7 @@ void BP35A1::deleteSession()
   debugLog("BP35A1::send [SKTERM]\r\n");
   _serial->print("SKTERM\r\n");
   clearBuffer();
+  _panaSessionLifetime = 86400;
 }
 
 bool BP35A1::getVersion()
@@ -105,7 +106,12 @@ bool BP35A1::setSessionLifetime(unsigned int seconds)
 {
   debugLog("BP35A1::send [SKSREG S16 <%08X>]\r\n", seconds);
   _serial->printf("SKSREG S16 %08X\r\n", seconds);
-  return waitSuccessResponse();
+  if (waitSuccessResponse())
+  {
+    _panaSessionLifetime = seconds;
+    return true;
+  }
+  return false;
 }
 
 bool BP35A1::requestAndWaitConnection()
@@ -254,6 +260,7 @@ bool BP35A1::waitSuccessResponse(const int timeout)
     if (_serial->available())
     {
       String res = readSerialLine();
+      log_d("BP35A1::waitSuccessResponse(): received response: %s", res.c_str());
 
       if (res.indexOf("FAIL ER") != -1)
       {
@@ -273,7 +280,7 @@ bool BP35A1::waitSuccessResponse(const int timeout)
 
 bool BP35A1::readReCertificationEvent()
 {
-  if (_serial->available())
+  while (_serial->available())
   {
     String res = readSerialLine();
     if (res.indexOf("EVENT 29") != -1)
@@ -282,6 +289,17 @@ bool BP35A1::readReCertificationEvent()
       return waitConnection();
     }
   }
+#if 0
+  // PANAセッション有効期限の75%を超えたら再認証を行う
+  if (_lastCertificationTime+(_panaSessionLifetime*1000*75/100) < millis())
+  {
+    log_d("BP35A1::readReCertificationEvent(): PANA session lifetime exceeded, re-certification needed");
+    if (!requestReconnection()) {
+      return false;
+    }
+    return waitConnection();
+  }
+#endif
   return true;
 }
 
@@ -491,6 +509,13 @@ bool BP35A1::requestConnection()
   return waitSuccessResponse();
 }
 
+bool BP35A1::requestReconnection()
+{
+  debugLog("BP35A1::send [SKREJOIN]");
+  _serial->printf("SKREJOIN\r\n");
+  return waitSuccessResponse();
+}
+
 bool BP35A1::waitConnection()
 {
   unsigned long startTime = millis();
@@ -504,6 +529,7 @@ bool BP35A1::waitConnection()
       if (res.indexOf("EVENT 25") != -1)
       {
         log_d("BP35A1::connection succeeded");
+        _lastCertificationTime = millis();
         return true;
       }
       else if (res.indexOf("EVENT 24") != -1)
@@ -600,6 +626,7 @@ bool BP35A1::waitUdpResponse(const int timeout)
     if (_serial->available())
     {
       String res = readSerialLine();
+      log_d("BP35A1::waitUdpResponse(): received response: %s", res.c_str());
 
       if (res.indexOf("ERXUDP") != -1)
       {
@@ -753,6 +780,14 @@ String BP35A1::readSerialLine(int timeout)
       {
         if (_serial->peek() == '\n') {
           _serial->read(); // '\n' を読み捨て
+        }
+        line.trim();
+        return line;
+      }
+      else if (line.endsWith("\n"))
+      {
+        if (_serial->peek() == '\r') {
+          _serial->read(); // '\r' を読み捨て
         }
         line.trim();
         return line;

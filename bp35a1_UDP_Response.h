@@ -111,7 +111,13 @@ public:
 
   int getAmperageR() { return _amperageR; }
   int getAmperageT() { return _amperageT; }
-  int getAmperage() { return _amperageR + _amperageT; }
+  int getAmperage() {
+    if (_amperageT == 0x7FFE) {
+      // 単相2線式の場合
+      return _amperageR;
+    }
+    return _amperageR + _amperageT;
+  }
 
 private:
   int _amperageR; // 瞬間電流量(R相)(0.1A)
