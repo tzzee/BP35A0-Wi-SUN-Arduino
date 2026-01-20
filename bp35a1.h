@@ -85,14 +85,14 @@ public:
 
 private:
   bool waitSuccessResponse(const int timeout = READ_TIMEOUT);
-  bool waitUdpSuccessResponse(const int timeout = READ_TIMEOUT);
+  bool waitUdpSuccessResponse(const int timeout = READ_TIMEOUT, bool *needRetry = nullptr);
   bool waitScanResponse(int duration);
-  bool waitIpv6AddrResponse();
+  bool waitIpv6AddrResponse(const int timeout = READ_TIMEOUT);
   bool requestConnection(); // PANN 接続要求を送信する
   bool waitConnection();    // PANA 接続完了を待つ
 
   bool setAsciiMode(bool use_ascii_mode);
-  bool waitRoptResponse();  // ROPTコマンドの応答を待つ
+  bool waitRoptResponse(const int timeout = READ_TIMEOUT);  // ROPTコマンドの応答を待つ
 
   bool sendUdp(std::vector<byte> data);
   bool waitUdpResponse(const int timeout = READ_TIMEOUT);
@@ -124,7 +124,7 @@ private:
     return T::dataLength() + offset;
   }
 
-  String readSerialLine();
+  String readSerialLine(int timeout=READ_TIMEOUT);
   float convertTotalPower(long power); // レスポンスで返ってきた積算電力量を kWh に変換する。未来の時刻の積算電力量は 0 になる
 
   static String removePrefix(String str, String prefix);

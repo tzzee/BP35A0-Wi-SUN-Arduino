@@ -225,7 +225,7 @@ bool BP35A1::scanChannel()
 
     if (!waitScanResponse(duration))
     {
-      Serial.println("BP35A1::scan result not received");
+      log_w("BP35A1::scan result not received");
       delay(1000);
     }
     else
@@ -250,7 +250,7 @@ bool BP35A1::waitSuccessResponse(const int timeout)
 
       if (res.indexOf("FAIL ER") != -1)
       {
-        Serial.println("BP35A1::waitSuccessResponse(): error response received");
+        log_e("BP35A1::waitSuccessResponse(): error response received");
         return false;
       }
       else if (res.indexOf("OK") != -1)
@@ -264,11 +264,16 @@ bool BP35A1::waitSuccessResponse(const int timeout)
   return false;
 }
 
-bool BP35A1::waitUdpSuccessResponse(int timeout)
+bool BP35A1::waitUdpSuccessResponse(int timeout, bool *needRetry)
 {
   const unsigned long startTime = millis();
   bool isReceived = false;
-  int retryCount = 0;
+  static int retryCount21_01 = 0;
+  static int retryCount21_02 = 0;
+
+  if (needRetry != nullptr) {
+    *needRetry = false;
+  }
 
   while (startTime + timeout > millis())
   {
@@ -300,14 +305,16 @@ bool BP35A1::waitUdpSuccessResponse(int timeout)
         // レスポンスの要素数が 5 以外の場合は return
         if (cols.size() != 5)
         {
-          Serial.println("BP35A1::waitUdpEvent(): Invalid response format");
+          log_e("BP35A1::waitUdpEvent(): Invalid response format");
           return false;
         }
 
         if (cols[4].find("00") != std::string::npos)
         {
-          Serial.println("BP35A1::waitUdpEvent(): Response data received");
+          log_d("BP35A1::waitUdpEvent(): Response data received");
           if (isReceived) {
+            retryCount21_01 = 0;
+            retryCount21_02 = 0;
             return true;
           }
           else
@@ -317,28 +324,45 @@ bool BP35A1::waitUdpSuccessResponse(int timeout)
         }
         else if (cols[4].find("01") != std::string::npos)
         {
-          Serial.println("BP35A1::waitUdpEvent(): No response data");
+          retryCount21_01++;
+          if (retryCount21_01 >= 3)
+          {
+            log_e("BP35A1::waitUdpEvent(): No response data after retries");
+            return false;
+          }
+          log_w("BP35A1::waitUdpEvent(): No response data");
+          if (needRetry != nullptr) {
+            *needRetry = true;
+          }
           return false;
         }
         else if (cols[4].find("02") != std::string::npos)
         {
-          retryCount++;
-          if (retryCount >= 3)
+          retryCount21_02++;
+          if (retryCount21_02 >= 3)
           {
-            Serial.println("BP35A1::waitUdpEvent(): Response data is being prepared, but no data after retries");
+            log_e("BP35A1::waitUdpEvent(): Response data is being prepared, but no data after retries");
             return false;
           }
+          log_w("BP35A1::waitUdpEvent(): Response data is being prepared");
+          if (needRetry != nullptr) {
+            *needRetry = true;
+          }
+          return false;
         }
       }
       else if (res.indexOf("FAIL ER") != -1)
       {
-        Serial.println("BP35A1::waitUdpEvent(): error response received");
+        log_e("BP35A1::waitUdpEvent(): error response received");
         return false;
       }
       else if (res.indexOf("OK") != -1)
       {
+        log_d("BP35A1::waitUdpEvent(): OK response received");
         if (isReceived)
         {
+          retryCount21_01 = 0;
+          retryCount21_02 = 0;
           return true;
         }
         else
@@ -349,7 +373,7 @@ bool BP35A1::waitUdpSuccessResponse(int timeout)
     }
     delay(READ_INTERVAL);
   }
-  Serial.println("BP35A1::waitScanResponse(): TimeOut");
+  log_w("BP35A1::waitScanResponse(): TimeOut");
   return false;
 }
 
@@ -402,13 +426,14 @@ bool BP35A1::waitScanResponse(int duration)
     delay(READ_INTERVAL);
   }
 
-  Serial.println("BP35A1::waitScanResponse(): TimeOut");
+  log_w("BP35A1::waitScanResponse(): TimeOut");
   return false;
 }
 
-bool BP35A1::waitIpv6AddrResponse()
+bool BP35A1::waitIpv6AddrResponse(int timeout)
 {
-  while (true)
+  const unsigned long startTime = millis();
+  while (startTime + timeout > millis())
   {
     if (_serial->available())
     {
@@ -424,6 +449,7 @@ bool BP35A1::waitIpv6AddrResponse()
 
     delay(READ_INTERVAL);
   }
+  return false;
 }
 
 bool BP35A1::requestConnection()
@@ -450,7 +476,7 @@ bool BP35A1::waitConnection()
       }
       else if (res.indexOf("EVENT 24") != -1)
       {
-        Serial.println("BP35A1::connection failed");
+        log_e("BP35A1::connection failed");
         return false;
       }
       else if (res.indexOf("EVENT 21") != -1)
@@ -463,7 +489,7 @@ bool BP35A1::waitConnection()
     delay(READ_INTERVAL);
   }
 
-  Serial.println("BP35A1::waitConnection(): TimeOut");
+  log_w("BP35A1::waitConnection(): TimeOut");
   return false;
 }
 
@@ -485,10 +511,11 @@ bool BP35A1::setAsciiMode(bool use_ascii_mode)
   return status;
 }
 
-bool BP35A1::waitRoptResponse()
+bool BP35A1::waitRoptResponse(int timeout)
 {
   _serial->flush();
-  while (true)
+  const unsigned long startTime = millis();
+  while (startTime + timeout > millis())
   {
     if (_serial->available())
     {
@@ -505,6 +532,7 @@ bool BP35A1::waitRoptResponse()
 
     delay(READ_INTERVAL);
   }
+  return false;
 }
 
 bool BP35A1::sendUdp(std::vector<byte> data)
@@ -512,14 +540,24 @@ bool BP35A1::sendUdp(std::vector<byte> data)
   std::stringstream command;
   command << "SKSENDTO 1 " << _ipv6.c_str() << " 0E1A 1 0 " << std::setw(4) << std::setfill('0') << std::uppercase << std::hex << data.size() << " ";
 
-  _serial->print(command.str().c_str());
-  for (const auto &d : data)
+  while (true)
   {
-    _serial->write(d);
+    _serial->print(command.str().c_str());
+    for (const auto &d : data)
+    {
+      _serial->write(d);
+    }
+    _serial->print("\r\n");
+    bool needRetry = false;
+    if(waitUdpSuccessResponse(READ_TIMEOUT, &needRetry)) {
+      return true;
+    }
+    if (!needRetry) {
+      return false;
+    }
+    delay(READ_INTERVAL);
+    log_w("BP35A1::sendUdp(): Retrying to send UDP data");
   }
-  _serial->print("\r\n");
-
-  return waitUdpSuccessResponse();
 }
 
 bool BP35A1::waitUdpResponse(const int timeout)
@@ -541,6 +579,7 @@ bool BP35A1::waitUdpResponse(const int timeout)
       delay(READ_INTERVAL);
     }
   }
+  log_d("BP35A1::waitUdpResponse(): TimeOut");
   return false;
 }
 
@@ -668,10 +707,11 @@ bool BP35A1::handleUdpSetResponse(std::string *data)
   return false;
 }
 
-String BP35A1::readSerialLine()
+String BP35A1::readSerialLine(int timeout)
 {
+  const unsigned long startTime = millis();
   String line = "";
-  while (true)
+  while (startTime + timeout > millis())
   {
     if (_serial->available() > 0)
     {
@@ -687,6 +727,7 @@ String BP35A1::readSerialLine()
       }
     }
   }
+  return String();
 }
 
 float BP35A1::convertTotalPower(long power)
