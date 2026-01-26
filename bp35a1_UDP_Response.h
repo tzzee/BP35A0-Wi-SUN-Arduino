@@ -116,6 +116,7 @@ public:
       // 単相2線式の場合
       return _amperageR;
     }
+    // 合成動作定格電流
     return _amperageR + _amperageT;
   }
 

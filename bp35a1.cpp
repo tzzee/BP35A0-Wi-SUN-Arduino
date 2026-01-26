@@ -168,6 +168,59 @@ bool BP35A1::requestCurrentTotalPower()
   return getProperties({CmdType::CURRENT_TOTAL_POWER});
 }
 
+bool BP35A1::requestBRouteId()
+{
+  return getProperties({CmdType::B_ROUTE_ID});
+}
+
+bool BP35A1::requestOneMinuteTotalPower()
+{
+  return getProperties({CmdType::ONE_MINUTE_TOTAL_POWER});
+}
+
+bool BP35A1::requestEffectiveDigits()
+{
+  return getProperties({CmdType::EFFECTIVE_DIGITS});
+}
+
+bool BP35A1::requestReverseTotalPower()
+{
+  return getProperties({CmdType::TOTAL_POWER_REVERSE});
+}
+
+bool BP35A1::requestReverseTotalPowerHistories()
+{
+  return getProperties({CmdType::TOTAL_POWER_HISTORIES_REVERSE});
+}
+
+bool BP35A1::requestReverseCurrentTotalPower()
+{
+  return getProperties({CmdType::CURRENT_TOTAL_POWER_REVERSE});
+}
+
+bool BP35A1::requestTotalPowerHistories3()
+{
+  return getProperties({CmdType::TOTAL_POWER_HISTORIES3});
+}
+
+bool BP35A1::requestTotalHistoryCollectionDate3()
+{
+  return getProperties({CmdType::TOTAL_HISTORY_COLLECTION_DATE3});
+}
+
+bool BP35A1::setTotalHistoryCollectionDate3(const byte *data)
+{
+  if (!data) {
+    return false;
+  }
+  std::vector<byte> values;
+  values.reserve(7);
+  for (int i = 0; i < 7; ++i) {
+    values.push_back(data[i]);
+  }
+  return setProperties(CmdType::TOTAL_HISTORY_COLLECTION_DATE3, values);
+}
+
 bool BP35A1::getProperties(std::vector<CmdType> commands)
 {
   std::vector<byte> data = {
@@ -183,7 +236,16 @@ bool BP35A1::getProperties(std::vector<CmdType> commands)
     data.push_back(static_cast<byte>(cmd));
     data.push_back(0x00);
   }
-  return sendUdp(data) && waitUdpResponse();
+  for (int i=0; i<3; i++) {
+    if (!sendUdp(data)) {
+      return false;
+    }
+    if (waitUdpResponse()) {
+      return true;
+    }
+    delay(1000);
+  }
+  return false;
 }
 
 bool BP35A1::setProperties(CmdType command, std::vector<byte> values)
@@ -198,13 +260,22 @@ bool BP35A1::setProperties(CmdType command, std::vector<byte> values)
 
   data.push_back(0x01);                       // OPC 処理プロパティ数
   data.push_back(static_cast<byte>(command)); // EPC 処理プロパティ
-  data.push_back(0x01);                       // PDC Write
+  data.push_back(static_cast<byte>(values.size())); // PDC Write
 
   for (const auto &value : values)
   {
     data.push_back(value);
   }
-  return sendUdp(data) && waitUdpResponse();
+  for (int i=0; i<3; i++) {
+    if (!sendUdp(data)) {
+      return false;
+    }
+    if (waitUdpResponse()) {
+      return true;
+    }
+    delay(1000);
+  }
+  return false;
 }
 
 void BP35A1::clearBuffer()
@@ -656,12 +727,14 @@ bool BP35A1::handleUdpResponse(String response)
   // レスポンスの要素数が 10 以外の場合は return
   if (cols.size() != 10)
   {
+    log_e("BP35A1::handleUdpResponse(): Invalid response format");
     return false;
   }
   std::string data = cols[9];
   // レスポンスした識別子がスマートメータと一致するか
   if (data.size() < 24 || data.substr(8, 6) != SMART_METER_ID)
   {
+    log_e("BP35A1::handleUdpResponse(): Invalid smart meter ID");
     return false;
   }
 
@@ -684,7 +757,7 @@ bool BP35A1::handleUdpResponse(String response)
     else
     {
       status = false;
-      debugLog("Not supported ESV: %d", esv);
+      log_e("Not supported ESV: %x", esv);
     }
   }
 
@@ -696,6 +769,11 @@ bool BP35A1::handleUdpGetResponse(std::string *data)
   byte epc = strtol(data->substr(0, 2).c_str(), NULL, 16);
   CmdType cmd = static_cast<CmdType>(epc);
   int dataOffset = 4;
+  int pdc = strtol(data->substr(2, 2).c_str(), NULL, 16);
+  if (data->size() < static_cast<size_t>(dataOffset + pdc * 2)) {
+    log_e("BP35A1::handleUdpGetResponse(): Invalid data length");
+    return false;
+  }
 
   // 係数(D3)
   if (cmd == CmdType::COEFFICIENT && validateDataLength<Coefficient>(data, dataOffset))
@@ -716,9 +794,15 @@ bool BP35A1::handleUdpGetResponse(std::string *data)
     return true;
   }
   // 積算電力量計測値履歴(E2)
-  else if (cmd == CmdType::TOTAL_POWER_HISTORIES && validateDataLength<TotalPowerHistories>(data, dataOffset))
+  else if (cmd == CmdType::TOTAL_POWER_HISTORIES)
   {
-    _totalPowerHistories = readUdpResponse<TotalPowerHistories>(data, dataOffset);
+    std::string payload = data->substr(dataOffset, pdc * 2);
+    if (!parseHexBytes(payload, _totalPowerHistoriesRaw.data(), _totalPowerHistoriesRaw.size())) {
+      log_d("BP35A1::handleUdpGetResponse(): Failed to parse total power histories");
+      return false;
+    }
+    _totalPowerHistories = TotalPowerHistories(payload);
+    *data = data->substr(dataOffset + pdc * 2);
     return true;
   }
   // 積算履歴収集日(E5)
@@ -745,6 +829,95 @@ bool BP35A1::handleUdpGetResponse(std::string *data)
     _currentTotalPower = readUdpResponse<CurrentTotalPower>(data, dataOffset);
     return true;
   }
+  // Bルート識別番号(C0)
+  else if (cmd == CmdType::B_ROUTE_ID)
+  {
+    std::string payload = data->substr(dataOffset, pdc * 2);
+    if (!parseHexBytes(payload, _bRouteId.data(), _bRouteId.size())) {
+      return false;
+    }
+    *data = data->substr(dataOffset + pdc * 2);
+    return true;
+  }
+  // 1分積算電力量計測値(D0)
+  else if (cmd == CmdType::ONE_MINUTE_TOTAL_POWER)
+  {
+    std::string payload = data->substr(dataOffset, pdc * 2);
+    if (!parseHexBytes(payload, _oneMinuteTotalPower.data(), _oneMinuteTotalPower.size())) {
+      return false;
+    }
+    *data = data->substr(dataOffset + pdc * 2);
+    return true;
+  }
+  // 積算電力量有効桁数(D7)
+  else if (cmd == CmdType::EFFECTIVE_DIGITS)
+  {
+    std::string payload = data->substr(dataOffset, pdc * 2);
+    byte value = 0;
+    if (!parseHexBytes(payload, &value, 1)) {
+      return false;
+    }
+    _effectiveDigits = value;
+    *data = data->substr(dataOffset + pdc * 2);
+    return true;
+  }
+  // 積算電力量計測値(逆方向)(E3)
+  else if (cmd == CmdType::TOTAL_POWER_REVERSE)
+  {
+    std::string payload = data->substr(dataOffset, pdc * 2);
+    byte buf[4] = {0};
+    if (!parseHexBytes(payload, buf, sizeof(buf))) {
+      return false;
+    }
+    _reverseTotalPower = (static_cast<long>(buf[0]) << 24) |
+                         (static_cast<long>(buf[1]) << 16) |
+                         (static_cast<long>(buf[2]) << 8) |
+                         static_cast<long>(buf[3]);
+    *data = data->substr(dataOffset + pdc * 2);
+    return true;
+  }
+  // 積算電力量計測値履歴1(逆方向)(E4)
+  else if (cmd == CmdType::TOTAL_POWER_HISTORIES_REVERSE)
+  {
+    std::string payload = data->substr(dataOffset, pdc * 2);
+    if (!parseHexBytes(payload, _reverseTotalPowerHistories.data(), _reverseTotalPowerHistories.size())) {
+      log_d("BP35A1::handleUdpGetResponse(): Failed to parse reverse total power histories");
+      return false;
+    }
+    *data = data->substr(dataOffset + pdc * 2);
+    return true;
+  }
+  // 定時積算電力量計測値(逆方向)(EB)
+  else if (cmd == CmdType::CURRENT_TOTAL_POWER_REVERSE)
+  {
+    std::string payload = data->substr(dataOffset, pdc * 2);
+    if (!parseHexBytes(payload, _reverseCurrentTotalPower.data(), _reverseCurrentTotalPower.size())) {
+      return false;
+    }
+    *data = data->substr(dataOffset + pdc * 2);
+    return true;
+  }
+  // 積算電力量計測値履歴3(EE)
+  else if (cmd == CmdType::TOTAL_POWER_HISTORIES3)
+  {
+    std::string payload = data->substr(dataOffset, pdc * 2);
+    _totalPowerHistories3Length = (pdc <= _totalPowerHistories3.size()) ? pdc : _totalPowerHistories3.size();
+    if (!parseHexBytes(payload, _totalPowerHistories3.data(), _totalPowerHistories3Length)) {
+      return false;
+    }
+    *data = data->substr(dataOffset + pdc * 2);
+    return true;
+  }
+  // 積算履歴収集日3(EF)
+  else if (cmd == CmdType::TOTAL_HISTORY_COLLECTION_DATE3)
+  {
+    std::string payload = data->substr(dataOffset, pdc * 2);
+    if (!parseHexBytes(payload, _totalHistoryCollectionDate3.data(), _totalHistoryCollectionDate3.size())) {
+      return false;
+    }
+    *data = data->substr(dataOffset + pdc * 2);
+    return true;
+  }
 
   debugLog("Not supported EPC: %d\r\n", epc);
   return false;
@@ -759,6 +932,19 @@ bool BP35A1::handleUdpSetResponse(std::string *data)
   if (cmd == CmdType::TOTAL_HISTORY_COLLECTION_DATE && validateDataLength<CollectionDay>(data, 2))
   {
     readUdpResponse<CollectionDay>(data, 2);
+    return true;
+  }
+  if (cmd == CmdType::TOTAL_HISTORY_COLLECTION_DATE3)
+  {
+    int pdc = strtol(data->substr(2, 2).c_str(), NULL, 16);
+    if (data->size() < static_cast<size_t>(4 + pdc * 2)) {
+      return false;
+    }
+    std::string payload = data->substr(4, pdc * 2);
+    if (!parseHexBytes(payload, _totalHistoryCollectionDate3.data(), _totalHistoryCollectionDate3.size())) {
+      return false;
+    }
+    *data = data->substr(4 + pdc * 2);
     return true;
   }
 
@@ -807,6 +993,18 @@ float BP35A1::convertTotalPower(long power)
   {
     return power * getCoefficient() * getPowerUnit();
   }
+}
+
+bool BP35A1::parseHexBytes(const std::string& hex, byte* out, size_t outSize)
+{
+  if (!out || hex.size() < outSize * 2) {
+    return false;
+  }
+  for (size_t i = 0; i < outSize; ++i) {
+    const std::string byteStr = hex.substr(i * 2, 2);
+    out[i] = static_cast<byte>(strtoul(byteStr.c_str(), NULL, 16));
+  }
+  return true;
 }
 
 String BP35A1::removePrefix(String str, String prefix)
