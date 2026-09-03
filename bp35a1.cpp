@@ -493,7 +493,7 @@ bool BP35A1::waitUdpSuccessResponse(int timeout, bool *needRetry)
     }
     delay(READ_INTERVAL);
   }
-  log_w("BP35A1::waitScanResponse(): TimeOut");
+  log_w("BP35A1::waitUdpEvent(): TimeOut");
   return false;
 }
 
